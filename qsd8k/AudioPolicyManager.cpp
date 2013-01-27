@@ -60,6 +60,19 @@ audio_devices_t AudioPolicyManager::getDeviceForStrategy(routing_strategy strate
     }
 
     switch (strategy) {
+    case STRATEGY_SONIFICATION_RESPECTFUL:
+        if (mPhoneState != AudioSystem::MODE_IN_CALL) {
+            device = getDeviceForStrategy(STRATEGY_SONIFICATION, false /*fromCache*/);
+        } else if (isStreamActive(AudioSystem::MUSIC, SONIFICATION_RESPECTFUL_AFTER_MUSIC_DELAY)) {
+            // while media is playing (or has recently played), use the same device
+            device = getDeviceForStrategy(STRATEGY_MEDIA, false /*fromCache*/);
+        } else {
+            // when media is not playing anymore, fall back on the sonification behavior
+            device = getDeviceForStrategy(STRATEGY_SONIFICATION, false /*fromCache*/);
+        }
+
+        break;
+
     case STRATEGY_DTMF:
         if (mPhoneState != AudioSystem::MODE_IN_CALL) {
             // when off call, DTMF strategy follows the same rules as MEDIA strategy
@@ -167,6 +180,22 @@ audio_devices_t AudioPolicyManager::getDeviceForStrategy(routing_strategy strate
         }
         // The second device used for sonification is the same as the device used by media strategy
         // Note that when docked, we pick the device below (no duplication)
+        // FALL THROUGH
+
+    case STRATEGY_ENFORCED_AUDIBLE:
+        // strategy STRATEGY_ENFORCED_AUDIBLE uses same routing policy as STRATEGY_SONIFICATION
+        // except:
+        //   - when in call where it doesn't default to STRATEGY_PHONE behavior
+        //   - in countries where not enforced in which case it follows STRATEGY_MEDIA
+
+        if (strategy == STRATEGY_SONIFICATION ||
+                !mStreams[AUDIO_STREAM_ENFORCED_AUDIBLE].mCanBeMuted) {
+            device = mAvailableOutputDevices & AudioSystem::DEVICE_OUT_SPEAKER;
+            if (device == 0) {
+                ALOGE("getDeviceForStrategy() speaker device not found for STRATEGY_SONIFICATION");
+            }
+        }
+        // The second device used for sonification is the same as the device used by media strategy
         // FALL THROUGH
 
     case STRATEGY_MEDIA: {
